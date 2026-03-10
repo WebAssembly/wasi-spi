@@ -1,0 +1,125 @@
+package wasi:spi;
+
+/// Serial Peripheral Interface (SPI) API.
+///
+/// This interface provides a standard API for interacting with SPI devices from WebAssembly.
+/// It includes types for configuring device parameters, executing individual read/write
+/// operations, and performing full-duplex transfers and complex, multi-step transactions.
+interface spi {
+    /// Errors that can occur during SPI operations.
+    variant error {
+        /// Receive buffer overrun.
+        overrun,
+        /// Mode fault (e.g., multi-master conflict).
+        mode-fault,
+        /// Frame format error.
+        frame-format,
+        /// Chip select line fault.
+        chip-select-fault,
+        /// Other implementation-specific or platform-specific errors.
+        other(string),
+    }
+
+    /// An individual operation within an SPI transaction.
+    ///
+    /// Explanation for developers using this type. This variant is used to compose 
+    /// complex, multi-step transactions using the `spi-device.transaction` function. 
+    /// It allows you to interleave reads, writes, full-duplex transfers, and delays 
+    /// while keeping the chip select line continuously asserted.
+    variant operation {
+        /// Read a specified number of bytes.
+        read(u64),
+        /// Write the provided buffer of bytes.
+        write(list<u8>),
+        /// Perform a simultaneous full-duplex read and write using the provided buffer.
+        transfer(list<u8>),
+        /// Delay for a specified number of nanoseconds.
+        delay-ns(u32),
+    }
+    
+    /// The result of an individual SPI `operation` executed within a `transaction`.
+    ///
+    /// The order of results in the returned list matches the order of the `operation`s 
+    /// provided to the `transaction` function.
+    variant operation-result {
+        /// The data read from a `read` operation.
+        read(list<u8>),
+        /// Acknowledgment of a successful `write` operation.
+        write,
+        /// The data read back during a `transfer` operation.
+        transfer(list<u8>),
+        /// Acknowledgment of a successful `delay-ns` operation.
+        delay,
+    }
+
+    /// SPI clock modes, defining clock polarity (CPOL) and clock phase (CPHA).
+    enum mode {
+        /// CPOL=0, CPHA=0: Clock is low when idle, data is sampled on the leading edge.
+        mode0, 
+        /// CPOL=0, CPHA=1: Clock is low when idle, data is sampled on the trailing edge.
+        mode1, 
+        /// CPOL=1, CPHA=0: Clock is high when idle, data is sampled on the leading edge.
+        mode2, 
+        /// CPOL=1, CPHA=1: Clock is high when idle, data is sampled on the trailing edge.
+        mode3  
+    }
+
+    /// Configuration parameters for an SPI device.
+    record config {
+        /// The clock frequency in Hertz (Hz).
+        frequency: u32,
+        /// The clock mode (CPOL and CPHA).
+        mode: mode,
+        /// Indicates whether data is transmitted least-significant bit (LSB) first.
+        /// If false, data is transmitted most-significant bit (MSB) first.
+        lsb-first: bool,
+    }
+
+    /// A handle to an open SPI device.
+    ///
+    /// This resource represents an active connection to an underlying SPI peripheral.
+    resource spi-device {
+        /// Configure the SPI device with the specified parameters.
+        configure: func(config: config) -> result<_, error>;
+        
+        /// Read `len` bytes from the SPI device.
+        read: func(len: u64) -> result<list<u8>, error>;
+        
+        /// Write the provided `data` buffer to the SPI device.
+        write: func(data: list<u8>) -> result<_, error>;
+        
+        /// Perform a full-duplex transfer.
+        ///
+        /// This function writes the provided `data` and simultaneously reads back the
+        /// same number of bytes.
+        transfer: func(data: list<u8>) -> result<list<u8>, error>;
+        
+        /// Execute a sequence of operations as a single, continuous transaction.
+        ///
+        /// This is useful when multiple operations must be performed sequentially 
+        /// without releasing the SPI bus (i.e., keeping the chip select line asserted).
+        ///
+        /// <details>
+        /// <summary>Detailed specification</summary>
+        /// A compliant implementation MUST assert the chip select line before the first 
+        /// operation in the sequence and de-assert it only after the final operation completes 
+        /// or an error occurs. If any operation within the transaction fails, the implementation 
+        /// MUST immediately abort the transaction, de-assert chip select, and return the `error`.
+        /// </details>
+        transaction: func(operations: list<operation>) -> result<list<operation-result>, error>;
+    }
+
+    /// Get a list of available SPI device names on the host system.
+    get-device-names: func() -> list<string>;
+    
+    /// Open an SPI device by its name.
+    ///
+    /// Returns a handle to the `spi-device` on success, or an `error` if the device
+    /// cannot be found or accessed.
+    open-device: func(name: string) -> result<spi-device, error>;
+}
+
+/// The host world for the WASI SPI API.
+world wasi-spi-host {
+    import spi;
+}
