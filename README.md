@@ -16,34 +16,18 @@ Phase 1
 
 ### Champions
 
-- @merlijn-sebrechts
+- [@merlijn-sebrechts](https://github.com/merlijn-sebrechts)
 
 ### Phase 4 Advancement Criteria
 
 TODO before entering Phase 2.
 
-## Table of Contents [if the explainer is longer than one printed page]
-
-- [Introduction](#introduction)
-- [Goals [or Motivating Use Cases, or Scenarios]](#goals-or-motivating-use-cases-or-scenarios)
-- [Non-goals](#non-goals)
-- [API walk-through](#api-walk-through)
-  - [Use case 1](#use-case-1)
-  - [Use case 2](#use-case-2)
-- [Detailed design discussion](#detailed-design-discussion)
-  - [[Tricky design choice 1]](#tricky-design-choice-1)
-  - [[Tricky design choice 2]](#tricky-design-choice-2)
-- [Considered alternatives](#considered-alternatives)
-  - [[Alternative 1]](#alternative-1)
-  - [[Alternative 2]](#alternative-2)
-- [Stakeholder Interest & Feedback](#stakeholder-interest--feedback)
-- [References & acknowledgements](#references--acknowledgements)
 
 ### Introduction
 
 WASI SPI is a capability-based API that allows WebAssembly guests to interact with Serial Peripheral Interface (SPI) devices. Heavily inspired by the Rust embedded-hal ecosystem, this proposal prioritizes guest portability by delegating hardware-specific configuration (like baud rates, clock phases, and pin mappings) not covered by embedded-hal to the host environment. Guests simply request a logical device by name and perform standard reads, writes, transfers, and transactions.
 
-### Goals [or Motivating Use Cases, or Scenarios]
+### Goals
 
 - Device Communication: Enable WebAssembly guests to exchange data with SPI peripherals (e.g., sensors, displays, flash memory) exposed by the host environment.
 - Guest Portability: Wasm modules remain hardware-agnostic. A guest compiled once should run on any host (from embedded microcontrollers to Linux SBCs) without needing recompilation or awareness of the underlying bus speeds and pin mappings.
@@ -160,6 +144,6 @@ TODO before entering Phase 3.
 
 Many thanks for valuable feedback and advice from:
 
-- @merlijn-sebrechts
-- @Michielvk
-- @Zelzahn
+- [@merlijn-sebrechts](https://github.com/merlijn-sebrechts)
+- [@Michielvk](https://github.com/Michielvk)
+- [@Zelzahn](https://github.com/Zelzahn)
