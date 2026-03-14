@@ -1,11 +1,3 @@
-# [Example WASI proposal]
-
-This template can be used to start a new proposal, which can then be proposed in the WASI Subgroup meetings.
-
-The sections below are recommended. However, every proposal is different, and the community can help you flesh out the proposal, so don't block on having something filled in for each one of them.
-
-Thank you to the W3C Privacy CG for the [inspiration](https://github.com/privacycg/template)!
-
 # WASI SPI
 
 A proposed [WebAssembly System Interface](https://github.com/WebAssembly/WASI) API for Serial Peripheral Interface (SPI) communication.
@@ -37,10 +29,6 @@ WASI SPI is a capability-based API that allows WebAssembly guests to interact wi
 - Manual Bus Configuration: Allowing the guest to dynamically configure hardware-specific parameters (like baud rates, CPOL, CPHA, or pinouts) or manually assert or de-assert the CS line.
 
 ### API walk-through
-
-The full API documentation can be found [here](wasi-proposal-template.md).
-
-[Walk through of how someone would use this API.]
 
 #### Reading and parsing data from a configured sensor
 
@@ -105,7 +93,7 @@ In native Rust, `embedded-hal` operations are zero-allocation and zero-copy. The
 fn read(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 ```
 
-Because Wasm cannot safely share mutable pointers to guest memory across the host boundary, this WIT interface must allocate and return data by value:
+Because Wasm should not share mutable pointers to guest memory across the host boundary, this WIT interface must allocate and return data by value:
 
 ```wit
 // wasi:spi (WIT)
