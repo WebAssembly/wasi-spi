@@ -1,0 +1,81 @@
+package wasi:spi;
+
+/// An interface for interacting with Serial Peripheral Interface (SPI) devices.
+/// 
+/// Guests request a logical device by name, allowing for portable, 
+/// hardware-agnostic communication with SPI peripherals.
+interface spi {
+
+    /// Standard SPI hardware errors.
+    /// These variants closely map to the `embedded-hal` 1.0 `ErrorKind` trait.
+    variant error {
+        /// The received data was not read before new data was received.
+        overrun,
+        /// The SPI hardware detected a mode fault (e.g., multiple masters attempting to drive the bus).
+        mode-fault,
+        /// The frame format is incorrect (e.g., wrong bit order or data width).
+        frame-format,
+        /// A hardware fault associated with the Chip Select (CS) pin.
+        chip-select-fault,
+        /// A catch-all for underlying driver or hardware errors not covered above.
+        other(string),
+    }
+
+    /// An individual operation to be executed within a hardware transaction.
+    /// Note: `transfer-in-place` is not supported due to the pass-by-value semantics 
+    /// of the Wasm Component Model canonical ABI.
+    variant operation {
+        /// Read a specified number of bytes from the bus.
+        read(u64),
+        /// Write the provided bytes to the bus.
+        write(list<u8>),
+        /// Simultaneously write the provided bytes and read the same number of bytes back.
+        transfer(list<u8>),
+        /// Pause execution for the specified number of nanoseconds while keeping CS asserted.
+        delay-ns(u32),
+    }
+    
+    /// The result corresponding to an individual `operation` executed within a transaction.
+    variant operation-result {
+        /// The data read from the bus during a `read` operation.
+        read(list<u8>),
+        /// Acknowledgment that a `write` operation completed successfully.
+        write,
+        /// The data read from the bus during a `transfer` operation.
+        transfer(list<u8>),
+        /// Acknowledgment that a `delay-ns` operation completed successfully.
+        delay,
+    }
+
+    /// An opened SPI device ready for communication.
+    resource spi-device {
+        /// Assert the Chip Select (CS) line, read the specified number of bytes, 
+        /// and de-assert the CS line.
+        read: func(len: u64) -> result<list<u8>, error>;
+
+        /// Assert the Chip Select (CS) line, write the provided bytes, 
+        /// and de-assert the CS line.
+        write: func(data: list<u8>) -> result<error>;
+
+        /// Assert the Chip Select (CS) line, write the provided bytes while simultaneously 
+        /// reading the same number of bytes, and de-assert the CS line.
+        transfer: func(data: list<u8>) -> result<list<u8>, error>;
+
+        /// Execute a sequence of operations in a single uninterrupted hardware transaction.
+        /// 
+        /// Guarantees that the Chip Select (CS) line will remain asserted 
+        /// for the entire duration of the transaction. This is critical for communicating 
+        /// with peripherals that require multi-step commands (e.g., write a register address, 
+        /// delay, and then read the data) without yielding the bus.
+        transaction: func(operations: list<operation>) -> result<list<operation-result>, error>;
+    }
+
+    /// Open a logical SPI device by name.
+    /// 
+    /// Returns an opened SPI device handle ready for communication.
+    open: func(name: string) -> result<spi-device, error>;
+}
+
+world wasi-spi {
+    import spi;
+}

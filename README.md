@@ -1,89 +1,114 @@
-# [Example WASI proposal]
+# WASI SPI
 
-This template can be used to start a new proposal, which can then be proposed in the WASI Subgroup meetings.
-
-The sections below are recommended. However, every proposal is different, and the community can help you flesh out the proposal, so don't block on having something filled in for each one of them.
-
-Thank you to the W3C Privacy CG for the [inspiration](https://github.com/privacycg/template)!
-
-# [Title]
-
-A proposed [WebAssembly System Interface](https://github.com/WebAssembly/WASI) API.
+A proposed [WebAssembly System Interface](https://github.com/WebAssembly/WASI) API for Serial Peripheral Interface (SPI) communication.
 
 ### Current Phase
 
-[Fill in the current phase, e.g. Phase 1]
+Phase 1
 
 ### Champions
 
-- [Champion 1]
-- [Champion 2]
-- [etc.]
+- [@merlijn-sebrechts](https://github.com/merlijn-sebrechts)
 
 ### Phase 4 Advancement Criteria
 
 TODO before entering Phase 2.
 
-## Table of Contents [if the explainer is longer than one printed page]
-
-- [Introduction](#introduction)
-- [Goals [or Motivating Use Cases, or Scenarios]](#goals-or-motivating-use-cases-or-scenarios)
-- [Non-goals](#non-goals)
-- [API walk-through](#api-walk-through)
-  - [Use case 1](#use-case-1)
-  - [Use case 2](#use-case-2)
-- [Detailed design discussion](#detailed-design-discussion)
-  - [[Tricky design choice 1]](#tricky-design-choice-1)
-  - [[Tricky design choice 2]](#tricky-design-choice-2)
-- [Considered alternatives](#considered-alternatives)
-  - [[Alternative 1]](#alternative-1)
-  - [[Alternative 2]](#alternative-2)
-- [Stakeholder Interest & Feedback](#stakeholder-interest--feedback)
-- [References & acknowledgements](#references--acknowledgements)
 
 ### Introduction
 
-[The "executive summary" or "abstract". Explain in a few sentences what the goals of the project are, and a brief overview of how the solution works. This should be no more than 1-2 paragraphs.]
+WASI SPI is a capability-based API that allows WebAssembly guests to interact with Serial Peripheral Interface (SPI) devices. Heavily inspired by the Rust embedded-hal ecosystem, this proposal prioritizes guest portability by delegating hardware-specific configuration (like baud rates, clock phases, and pin mappings) not covered by embedded-hal to the host environment. Guests simply request a logical device by name and perform standard reads, writes, transfers, and transactions.
 
-### Goals [or Motivating Use Cases, or Scenarios]
+### Goals
 
-[What is the end-user need which this project aims to address?]
+- Device Communication: Enable WebAssembly guests to exchange data with SPI peripherals (e.g., sensors, displays, flash memory) exposed by the host environment.
+- Guest Portability: Wasm modules remain hardware-agnostic. A guest compiled once should run on any host (from embedded microcontrollers to Linux SBCs) without needing recompilation or awareness of the underlying bus speeds and pin mappings.
 
 ### Non-goals
 
-[If there are "adjacent" goals which may appear to be in scope but aren't, enumerate them here. This section may be fleshed out as your design progresses and you encounter necessary technical and other trade-offs.]
+- Manual Bus Configuration: Allowing the guest to dynamically configure hardware-specific parameters (like baud rates, CPOL, CPHA, or pinouts) or manually assert or de-assert the CS line.
 
 ### API walk-through
 
-The full API documentation can be found [here](wasi-proposal-template.md).
+#### Reading and parsing data from a configured sensor
 
-[Walk through of how someone would use this API.]
+```Rust
+use bindings::wasi::spi::spi;
 
-#### [Use case 1]
+fn read_temperature() -> Result<f32, spi::Error> {
+    let sensor = spi::open("temperature-sensor")?;
+    let data = sensor.read(2)?;
+    Ok((data as f32) * 0.01)
+}
+```
 
-[Provide example code snippets and diagrams explaining how the API would be used to solve the given problem]
+#### Executing a CS-enforced transaction
 
-#### [Use case 2]
+```Rust
+use bindings::wasi::spi::spi::{self, Operation, OperationResult};
 
-[etc.]
+fn read_display_controller_id() -> Result<u8, spi::Error> {
+    let display = spi::open("spi-display")?;
+    
+    // The host guarantees CS stays low for the entire sequence.
+    let results = display.transaction(&[
+        Operation::Write(vec![0x04]), // 'Read Display ID' command
+        Operation::DelayNs(1500),     // Hardware requires 1.5us delay to prepare data
+        Operation::Read(1),           // Read the 1-byte ID
+    ])?;
+    
+    // Extract and return the data from the final Read operation
+    if let Some(OperationResult::Read(id_bytes)) = results.last() {
+        return Ok(id_bytes[0]);
+    }
+    
+    Err(spi::Error::Other("Unexpected transaction result".into()))
+}
+```
 
 ### Detailed design discussion
 
-[This section should mostly refer to the .wit.md file that specifies the API. This section is for any discussion of the choices made in the API which don't make sense to document in the spec file itself.]
+#### Alignment with `embedded-hal SpiDevice`
 
-#### [Tricky design choice #1]
+This proposal is heavily modeled after the SPI traits defined in Rust's [embedded-hal 1.0](https://docs.rs/embedded-hal/latest/embedded_hal/spi/index.html). The `embedded-hal` ecosystem defines hardware-agnostic abstractions for embedded systems, making it the good blueprint for a portable Wasm interface. 
 
-[Talk through the tradeoffs in coming to the specific design point you want to make.]
+Many concepts map 1-to-1 from `embedded-hal` to this WIT proposal:
 
+* **Base Operations:** The discrete `read`, `write`, and `transfer` functions mirror the `embedded_hal::spi::SpiDevice` trait.
+
+* **Error Handling:** The `error` variant in WIT directly maps to `embedded_hal::spi::ErrorKind` (e.g. `overrun`, `mode-fault`, `frame-format`, `chip-select-fault`).
+
+* **Transactions:** The concept of grouping `Operation`s (Reads, Writes, Transfers, and Delays) into a single hardware-enforced transaction is preserved to guarantee Chip Select (CS) integrity.
+
+#### Divergences and the Component Model ABI
+
+While the conceptual model matches `embedded-hal`, the Wasm Component Model's canonical ABI necessitates strict **pass-by-value** semantics, forcing a divergence from Rust's native memory management.
+
+**1. Mutable References vs. Pass-by-Value**
+
+In native Rust, `embedded-hal` operations are zero-allocation and zero-copy. The caller provides mutable references to buffers (`&mut [u8]`), and the hardware driver fills them in-place:
+
+```rust
+// embedded-hal (Rust)
+fn read(&mut self, buf: &mut [u8]) -> Result<(), Error>;
 ```
-// Illustrated with example code.
+
+Because Wasm should not share mutable pointers to guest memory across the host boundary, this WIT interface must allocate and return data by value:
+
+```wit
+// wasi:spi (WIT)
+read: func(len: u64) -> result<list<u8>, error>;
 ```
 
-[This may be an open question, in which case you should link to any active discussion threads.]
+**2. Transaction Results**
 
-#### [Tricky design choice 2]
+In `embedded-hal`, a transaction takes an array of mutable `Operation` enums. Data read during the transaction is written directly into the buffers provided inside those enums. 
 
-[etc.]
+To achieve this in Wasm, the `transaction` function takes a `list<operation>` and returns a newly allocated `list<operation-result>` containing the fetched data. While this incurs allocation overhead on the host, it is a trade-off to preserve the pass-by-value semantics of wasm.
+
+**3. Omission of `TransferInPlace`**
+
+`embedded-hal` includes an `Operation::TransferInPlace(&mut [u8])` variant, which uses a single buffer for both transmitting and receiving to save memory. Without shared mutable memory over the Wasm boundary, implementing this in WIT would just result in a standard `transfer` under the hood. It was omitted to keep the API surface minimal.
 
 ### Considered alternatives
 
@@ -107,6 +132,6 @@ TODO before entering Phase 3.
 
 Many thanks for valuable feedback and advice from:
 
-- [Person 1]
-- [Person 2]
-- [etc.]
+- [@merlijn-sebrechts](https://github.com/merlijn-sebrechts)
+- [@Michielvk](https://github.com/Michielvk)
+- [@Zelzahn](https://github.com/Zelzahn)
