@@ -66,6 +66,11 @@ fn read_display_controller_id() -> Result<u8, spi::Error> {
 }
 ```
 
+### Proof of Concept
+
+A reference implementation and Proof of Concept (PoC) for this proposal is available at [https://github.com/idlab-discover/masters-wasi-spi](https://github.com/idlab-discover/masters-wasi-spi).
+
+
 ### Detailed design discussion
 
 #### Alignment with `embedded-hal SpiDevice`
