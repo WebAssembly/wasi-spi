@@ -10,6 +10,14 @@ Phase 1
 
 - [@merlijn-sebrechts](https://github.com/merlijn-sebrechts)
 
+### Portability Criteria
+WASI SPI must have an implementation for at least the following platforms:
+
+| Platform Environment | Architecture | Reference Hardware |
+| :--- | :--- | :--- |
+| Standard Linux OS | ARM64 | Raspberry Pi 4 Model B |
+| Bare-metal (No OS) | RISC-V | Raspberry Pi Pico 2 |
+
 ### Phase 4 Advancement Criteria
 
 TODO before entering Phase 2.
